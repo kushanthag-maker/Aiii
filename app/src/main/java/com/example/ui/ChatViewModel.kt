@@ -8,6 +8,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import android.util.Log
 import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -31,11 +32,16 @@ import java.util.Locale
 
 class ChatViewModel(application: Application) : AndroidViewModel(application), TextToSpeech.OnInitListener {
 
+    companion object {
+        private const val TAG = "ChatViewModel"
+    }
+
     private val repository = NovaRepository(application)
     private val prefs = application.getSharedPreferences("nova_ai_prefs", Context.MODE_PRIVATE)
 
-    // TTS
-    private var textToSpeech: TextToSpeech? = TextToSpeech(application, this)
+    // TTS - initialized safely in try-catch to avoid crashes on devices without TTS engines
+    private var textToSpeech: TextToSpeech? = null
+    private var isTtsInitialized = false
     private var speechRecognizer: SpeechRecognizer? = null
 
     // State
@@ -89,8 +95,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application), T
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
+        // Safe TTS initialization
+        try {
+            textToSpeech = TextToSpeech(application, this)
+        } catch (e: Throwable) {
+            Log.e(TAG, "TextToSpeech init warning: device does not support default TTS", e)
+        }
+
+        // Initialize default chat session safely
         viewModelScope.launch {
-            startNewChat()
+            try {
+                startNewChat()
+            } catch (e: Throwable) {
+                Log.e(TAG, "Error initializing default conversation", e)
+            }
         }
     }
 
@@ -113,12 +131,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application), T
         model: AiModelInfo = _currentModel.value
     ) {
         viewModelScope.launch {
-            val conv = repository.createConversation(
-                personaId = persona.id,
-                selectedModelId = model.id
-            )
-            _currentConversationId.value = conv.id
-            _inputText.value = ""
+            try {
+                val conv = repository.createConversation(
+                    personaId = persona.id,
+                    selectedModelId = model.id
+                )
+                _currentConversationId.value = conv.id
+                _inputText.value = ""
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to start new chat", e)
+            }
         }
     }
 
@@ -128,15 +150,23 @@ class ChatViewModel(application: Application) : AndroidViewModel(application), T
 
     fun togglePin(conversationId: String, isPinned: Boolean) {
         viewModelScope.launch {
-            repository.togglePin(conversationId, isPinned)
+            try {
+                repository.togglePin(conversationId, isPinned)
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to toggle pin", e)
+            }
         }
     }
 
     fun deleteConversation(conversationId: String) {
         viewModelScope.launch {
-            repository.deleteConversation(conversationId)
-            if (_currentConversationId.value == conversationId) {
-                startNewChat()
+            try {
+                repository.deleteConversation(conversationId)
+                if (_currentConversationId.value == conversationId) {
+                    startNewChat()
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to delete conversation", e)
             }
         }
     }
@@ -151,18 +181,23 @@ class ChatViewModel(application: Application) : AndroidViewModel(application), T
         _isLoading.value = true
 
         viewModelScope.launch {
-            val history = messages.value
-            repository.sendMessage(
-                conversationId = conversationId,
-                userText = messageToSend,
-                modelId = _currentModel.value.id,
-                novaApiKey = _novaApiKey.value,
-                thenuxApiKey = _thenuxApiKey.value,
-                customSystemPrompt = _customSystemPrompt.value,
-                personaId = _currentPersona.value.id,
-                conversationHistory = history
-            )
-            _isLoading.value = false
+            try {
+                val history = messages.value
+                repository.sendMessage(
+                    conversationId = conversationId,
+                    userText = messageToSend,
+                    modelId = _currentModel.value.id,
+                    novaApiKey = _novaApiKey.value,
+                    thenuxApiKey = _thenuxApiKey.value,
+                    customSystemPrompt = _customSystemPrompt.value,
+                    personaId = _currentPersona.value.id,
+                    conversationHistory = history
+                )
+            } catch (e: Throwable) {
+                Log.e(TAG, "Error sending message", e)
+            } finally {
+                _isLoading.value = false
+            }
         }
     }
 
@@ -181,80 +216,103 @@ class ChatViewModel(application: Application) : AndroidViewModel(application), T
     // TTS
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
-            textToSpeech?.language = Locale.US
+            try {
+                textToSpeech?.language = Locale.US
+                isTtsInitialized = true
+            } catch (e: Throwable) {
+                Log.w(TAG, "Could not set TTS language", e)
+            }
         }
     }
 
     fun speakText(text: String) {
-        val plainText = text.replace(Regex("```[\\s\\S]*?```"), "Code snippet omitted.")
-            .replace("#", "")
-            .replace("*", "")
-            .replace("`", "")
-        textToSpeech?.speak(plainText, TextToSpeech.QUEUE_FLUSH, null, "nova_tts")
+        if (!isTtsInitialized || textToSpeech == null) {
+            Toast.makeText(getApplication(), "Voice engine not ready", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            val plainText = text.replace(Regex("```[\\s\\S]*?```"), "Code snippet omitted.")
+                .replace("#", "")
+                .replace("*", "")
+                .replace("`", "")
+            textToSpeech?.speak(plainText, TextToSpeech.QUEUE_FLUSH, null, "nova_tts")
+        } catch (e: Throwable) {
+            Log.e(TAG, "TTS speak error", e)
+        }
     }
 
     fun stopSpeaking() {
-        textToSpeech?.stop()
+        try {
+            textToSpeech?.stop()
+        } catch (e: Throwable) {
+            Log.w(TAG, "Error stopping TTS", e)
+        }
     }
 
     // Voice recognition
     fun startVoiceRecognition() {
         val context = getApplication<Application>()
-        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            Toast.makeText(context, "Speech recognition is not available on this device", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        speechRecognizer?.destroy()
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
-            setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {
-                    isListening.value = true
-                }
-                override fun onBeginningOfSpeech() {}
-                override fun onRmsChanged(rmsdB: Float) {}
-                override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onEndOfSpeech() {
-                    isListening.value = false
-                }
-                override fun onError(error: Int) {
-                    isListening.value = false
-                }
-                override fun onResults(results: Bundle?) {
-                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    if (!matches.isNullOrEmpty()) {
-                        val spokenText = matches[0]
-                        recognizedSpeech.value = spokenText
-                    }
-                    isListening.value = false
-                }
-                override fun onPartialResults(partialResults: Bundle?) {
-                    val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    if (!matches.isNullOrEmpty()) {
-                        recognizedSpeech.value = matches[0]
-                    }
-                }
-                override fun onEvent(eventType: Int, params: Bundle?) {}
-            })
-        }
-
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-        }
-
         try {
+            if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+                Toast.makeText(context, "Speech recognition is not available on this device", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            speechRecognizer?.destroy()
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
+                setRecognitionListener(object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) {
+                        isListening.value = true
+                    }
+                    override fun onBeginningOfSpeech() {}
+                    override fun onRmsChanged(rmsdB: Float) {}
+                    override fun onBufferReceived(buffer: ByteArray?) {}
+                    override fun onEndOfSpeech() {
+                        isListening.value = false
+                    }
+                    override fun onError(error: Int) {
+                        isListening.value = false
+                    }
+                    override fun onResults(results: Bundle?) {
+                        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        if (!matches.isNullOrEmpty()) {
+                            val spokenText = matches[0]
+                            recognizedSpeech.value = spokenText
+                        }
+                        isListening.value = false
+                    }
+                    override fun onPartialResults(partialResults: Bundle?) {
+                        val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        if (!matches.isNullOrEmpty()) {
+                            recognizedSpeech.value = matches[0]
+                        }
+                    }
+                    override fun onEvent(eventType: Int, params: Bundle?) {}
+                })
+            }
+
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+            }
+
             speechRecognizer?.startListening(intent)
             isListening.value = true
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            Log.e(TAG, "Error starting voice recognition", e)
             isListening.value = false
         }
     }
 
     fun stopVoiceRecognition() {
-        speechRecognizer?.stopListening()
-        isListening.value = false
+        try {
+            speechRecognizer?.stopListening()
+        } catch (e: Throwable) {
+            Log.w(TAG, "Error stopping speech recognition", e)
+        } finally {
+            isListening.value = false
+        }
     }
 
     fun submitVoiceQuery() {
@@ -268,8 +326,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application), T
 
     override fun onCleared() {
         super.onCleared()
-        textToSpeech?.stop()
-        textToSpeech?.shutdown()
-        speechRecognizer?.destroy()
+        try {
+            textToSpeech?.stop()
+            textToSpeech?.shutdown()
+        } catch (e: Throwable) {
+            Log.w(TAG, "Error cleaning up TTS", e)
+        }
+        try {
+            speechRecognizer?.destroy()
+        } catch (e: Throwable) {
+            Log.w(TAG, "Error cleaning up speech recognizer", e)
+        }
     }
 }

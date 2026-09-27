@@ -9,7 +9,7 @@ import com.example.data.model.Conversation
 
 @Database(
     entities = [Conversation::class, ChatMessage::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -24,7 +24,7 @@ abstract class AppDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "nova_chat_database"
+                    "nova_ai_v2_db"
                 )
                     .fallbackToDestructiveMigration()
                     .build()
