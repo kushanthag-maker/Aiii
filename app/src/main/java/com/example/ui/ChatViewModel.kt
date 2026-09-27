@@ -12,6 +12,8 @@ import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.api.NovaRepository
+import com.example.data.model.AiModelInfo
+import com.example.data.model.AiModels
 import com.example.data.model.ChatMessage
 import com.example.data.model.Conversation
 import com.example.data.persona.AgentPersona
@@ -49,8 +51,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application), T
     private val _currentPersona = MutableStateFlow(Personas.Coder)
     val currentPersona: StateFlow<AgentPersona> = _currentPersona.asStateFlow()
 
-    private val _apiKey = MutableStateFlow(prefs.getString("api_key", NovaRepository.DEFAULT_API_KEY) ?: NovaRepository.DEFAULT_API_KEY)
-    val apiKey: StateFlow<String> = _apiKey.asStateFlow()
+    // Active AI Model (Nova AI or Thenux AI)
+    private val _currentModel = MutableStateFlow(
+        AiModels.getById(prefs.getString("selected_model_id", "nova") ?: "nova")
+    )
+    val currentModel: StateFlow<AiModelInfo> = _currentModel.asStateFlow()
+
+    private val _novaApiKey = MutableStateFlow(
+        prefs.getString("nova_api_key", NovaRepository.DEFAULT_NOVA_KEY) ?: NovaRepository.DEFAULT_NOVA_KEY
+    )
+    val novaApiKey: StateFlow<String> = _novaApiKey.asStateFlow()
+
+    private val _thenuxApiKey = MutableStateFlow(
+        prefs.getString("thenux_api_key", NovaRepository.DEFAULT_THENUX_KEY) ?: NovaRepository.DEFAULT_THENUX_KEY
+    )
+    val thenuxApiKey: StateFlow<String> = _thenuxApiKey.asStateFlow()
 
     private val _customSystemPrompt = MutableStateFlow(prefs.getString("system_prompt", "") ?: "")
     val customSystemPrompt: StateFlow<String> = _customSystemPrompt.asStateFlow()
@@ -75,7 +90,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application), T
 
     init {
         viewModelScope.launch {
-            // Load or initialize default conversation
             startNewChat()
         }
     }
@@ -88,9 +102,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application), T
         _currentPersona.value = persona
     }
 
-    fun startNewChat(persona: AgentPersona = _currentPersona.value) {
+    fun setModel(model: AiModelInfo) {
+        _currentModel.value = model
+        prefs.edit().putString("selected_model_id", model.id).apply()
+        Toast.makeText(getApplication(), "Switched to ${model.displayName} (${model.versionTag})", Toast.LENGTH_SHORT).show()
+    }
+
+    fun startNewChat(
+        persona: AgentPersona = _currentPersona.value,
+        model: AiModelInfo = _currentModel.value
+    ) {
         viewModelScope.launch {
-            val conv = repository.createConversation(personaId = persona.id)
+            val conv = repository.createConversation(
+                personaId = persona.id,
+                selectedModelId = model.id
+            )
             _currentConversationId.value = conv.id
             _inputText.value = ""
         }
@@ -129,7 +155,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application), T
             repository.sendMessage(
                 conversationId = conversationId,
                 userText = messageToSend,
-                apiKey = _apiKey.value,
+                modelId = _currentModel.value.id,
+                novaApiKey = _novaApiKey.value,
+                thenuxApiKey = _thenuxApiKey.value,
                 customSystemPrompt = _customSystemPrompt.value,
                 personaId = _currentPersona.value.id,
                 conversationHistory = history
@@ -138,11 +166,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application), T
         }
     }
 
-    fun saveSettings(newApiKey: String, newSystemPrompt: String) {
-        _apiKey.value = newApiKey
+    fun saveSettings(newNovaApiKey: String, newThenuxApiKey: String, newSystemPrompt: String) {
+        _novaApiKey.value = newNovaApiKey
+        _thenuxApiKey.value = newThenuxApiKey
         _customSystemPrompt.value = newSystemPrompt
         prefs.edit()
-            .putString("api_key", newApiKey)
+            .putString("nova_api_key", newNovaApiKey)
+            .putString("thenux_api_key", newThenuxApiKey)
             .putString("system_prompt", newSystemPrompt)
             .apply()
         Toast.makeText(getApplication(), "Settings saved successfully", Toast.LENGTH_SHORT).show()
@@ -156,7 +186,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application), T
     }
 
     fun speakText(text: String) {
-        // Strip markdown code blocks before reading aloud for better listening experience
         val plainText = text.replace(Regex("```[\\s\\S]*?```"), "Code snippet omitted.")
             .replace("#", "")
             .replace("*", "")

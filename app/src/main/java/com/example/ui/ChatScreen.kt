@@ -2,9 +2,7 @@ package com.example.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,6 +31,7 @@ import com.example.ui.components.ChatMessageItem
 import com.example.ui.components.CodeStudioSheet
 import com.example.ui.components.HomeEmptyState
 import com.example.ui.components.InputBar
+import com.example.ui.components.ModelSelectorSheet
 import com.example.ui.components.PersonaSelectorSheet
 import com.example.ui.components.PromptPresetsSheet
 import com.example.ui.components.SettingsDialog
@@ -56,7 +55,9 @@ fun ChatScreen(
     val inputText by viewModel.inputText.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val currentPersona by viewModel.currentPersona.collectAsStateWithLifecycle()
-    val apiKey by viewModel.apiKey.collectAsStateWithLifecycle()
+    val currentModel by viewModel.currentModel.collectAsStateWithLifecycle()
+    val novaApiKey by viewModel.novaApiKey.collectAsStateWithLifecycle()
+    val thenuxApiKey by viewModel.thenuxApiKey.collectAsStateWithLifecycle()
     val customSystemPrompt by viewModel.customSystemPrompt.collectAsStateWithLifecycle()
 
     val isVoiceModalOpen by viewModel.isVoiceModalOpen.collectAsStateWithLifecycle()
@@ -64,11 +65,13 @@ fun ChatScreen(
     val recognizedSpeech by viewModel.recognizedSpeech.collectAsStateWithLifecycle()
 
     // Sheet states
+    var showModelSelectorSheet by remember { mutableStateOf(false) }
     var showPresetsSheet by remember { mutableStateOf(false) }
     var showPersonaSheet by remember { mutableStateOf(false) }
     var showCodeStudioSheet by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
 
+    val modelSelectorSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val presetsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val personaSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val codeStudioSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -92,6 +95,7 @@ fun ChatScreen(
                 AppDrawer(
                     pinnedConversations = pinnedConversations,
                     recentConversations = recentConversations,
+                    currentModel = currentModel,
                     selectedConversationId = currentConversationId,
                     onSelectConversation = { id ->
                         viewModel.selectConversation(id)
@@ -106,6 +110,10 @@ fun ChatScreen(
                     },
                     onDeleteConversation = { id ->
                         viewModel.deleteConversation(id)
+                    },
+                    onOpenModelSelector = {
+                        coroutineScope.launch { drawerState.close() }
+                        showModelSelectorSheet = true
                     },
                     onOpenSettings = {
                         coroutineScope.launch { drawerState.close() }
@@ -130,15 +138,16 @@ fun ChatScreen(
             containerColor = Color.Black,
             topBar = {
                 TopBar(
+                    currentModel = currentModel,
                     currentPersona = currentPersona,
                     onMenuClick = {
                         coroutineScope.launch { drawerState.open() }
                     },
+                    onModelClick = {
+                        showModelSelectorSheet = true
+                    },
                     onNewChatClick = {
                         viewModel.startNewChat()
-                    },
-                    onPersonaBadgeClick = {
-                        showPersonaSheet = true
                     }
                 )
             },
@@ -168,7 +177,6 @@ fun ChatScreen(
                     .padding(innerPadding)
             ) {
                 if (messages.isEmpty()) {
-                    // Empty state with suggestion rows matching Screenshot 1
                     HomeEmptyState(
                         onPromptSelected = { selectedPrompt ->
                             viewModel.sendMessage(selectedPrompt)
@@ -196,6 +204,18 @@ fun ChatScreen(
                 }
             }
         }
+    }
+
+    // Model Selector Bottom Sheet
+    if (showModelSelectorSheet) {
+        ModelSelectorSheet(
+            selectedModel = currentModel,
+            onSelectModel = { model ->
+                viewModel.setModel(model)
+            },
+            sheetState = modelSelectorSheetState,
+            onDismiss = { showModelSelectorSheet = false }
+        )
     }
 
     // Presets Bottom Sheet
@@ -235,10 +255,11 @@ fun ChatScreen(
     // Settings Dialog
     if (showSettingsDialog) {
         SettingsDialog(
-            currentApiKey = apiKey,
+            currentNovaApiKey = novaApiKey,
+            currentThenuxApiKey = thenuxApiKey,
             customSystemPrompt = customSystemPrompt,
-            onSave = { key, prompt ->
-                viewModel.saveSettings(key, prompt)
+            onSave = { novaKey, thenuxKey, prompt ->
+                viewModel.saveSettings(novaKey, thenuxKey, prompt)
             },
             onDismiss = { showSettingsDialog = false }
         )

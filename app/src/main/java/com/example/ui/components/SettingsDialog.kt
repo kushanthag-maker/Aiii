@@ -17,9 +17,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -48,12 +48,14 @@ import com.example.data.api.NovaRepository
 
 @Composable
 fun SettingsDialog(
-    currentApiKey: String,
+    currentNovaApiKey: String,
+    currentThenuxApiKey: String,
     customSystemPrompt: String,
-    onSave: (apiKey: String, systemPrompt: String) -> Unit,
+    onSave: (novaApiKey: String, thenuxApiKey: String, systemPrompt: String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var apiKeyText by remember { mutableStateOf(currentApiKey) }
+    var novaKeyText by remember { mutableStateOf(currentNovaApiKey) }
+    var thenuxKeyText by remember { mutableStateOf(currentThenuxApiKey) }
     var promptText by remember { mutableStateOf(customSystemPrompt) }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -77,7 +79,7 @@ fun SettingsDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Nova AI Settings",
+                        text = "Nova & Thenux Settings",
                         color = Color.White,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
@@ -97,7 +99,7 @@ fun SettingsDialog(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
-                // API Key Section
+                // Nova AI API Key Section
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Default.Key,
@@ -107,7 +109,7 @@ fun SettingsDialog(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Nova API Key",
+                        text = "Nova AI Key",
                         color = Color.White,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold
@@ -125,10 +127,49 @@ fun SettingsDialog(
                         .padding(horizontal = 12.dp, vertical = 10.dp)
                 ) {
                     BasicTextField(
-                        value = apiKeyText,
-                        onValueChange = { apiKeyText = it },
+                        value = novaKeyText,
+                        onValueChange = { novaKeyText = it },
                         textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
                         cursorBrush = SolidColor(Color(0xFF38BDF8)),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Thenux AI API Key Section
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Bolt,
+                        contentDescription = null,
+                        tint = Color(0xFF10B981),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Thenux AI Bearer Token",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF1E1E24))
+                        .border(1.dp, Color(0xFF2E2E38), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    BasicTextField(
+                        value = thenuxKeyText,
+                        onValueChange = { thenuxKeyText = it },
+                        textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
+                        cursorBrush = SolidColor(Color(0xFF10B981)),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -157,14 +198,6 @@ fun SettingsDialog(
                             fontWeight = FontWeight.SemiBold
                         )
                     }
-
-                    Text(
-                        text = "Reset Default",
-                        color = Color(0xFF38BDF8),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                    )
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
@@ -172,7 +205,7 @@ fun SettingsDialog(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(130.dp)
+                        .height(110.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color(0xFF1E1E24))
                         .border(1.dp, Color(0xFF2E2E38), RoundedCornerShape(12.dp))
@@ -191,7 +224,7 @@ fun SettingsDialog(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(22.dp))
 
                 // Buttons
                 Row(
@@ -209,13 +242,13 @@ fun SettingsDialog(
 
                     Button(
                         onClick = {
-                            onSave(apiKeyText.trim(), promptText.trim())
+                            onSave(novaKeyText.trim(), thenuxKeyText.trim(), promptText.trim())
                             onDismiss()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF38BDF8)),
                         shape = RoundedCornerShape(16.dp)
                     ) {
-                        Text("Save Changes", color = Color.Black, fontWeight = FontWeight.Bold)
+                        Text("Save", color = Color.Black, fontWeight = FontWeight.Bold)
                     }
                 }
             }

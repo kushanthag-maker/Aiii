@@ -14,7 +14,8 @@ data class Conversation(
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val isPinned: Boolean = false,
-    val personaId: String = "coder"
+    val personaId: String = "coder",
+    val selectedModelId: String = "nova"
 )
 
 @Entity(
@@ -37,5 +38,6 @@ data class ChatMessage(
     val content: String,
     val timestamp: Long = System.currentTimeMillis(),
     val hasCode: Boolean = false,
-    val isError: Boolean = false
+    val isError: Boolean = false,
+    val modelUsed: String = "nova"
 )

@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Refresh
@@ -39,6 +40,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.AiModels
 import com.example.data.model.ChatMessage
 import com.example.data.persona.AgentPersona
 import com.example.ui.theme.NovaTextPrimary
@@ -53,6 +55,7 @@ fun ChatMessageItem(
 ) {
     val context = LocalContext.current
     val isUser = message.role == "user"
+    val modelInfo = AiModels.getById(message.modelUsed)
 
     if (isUser) {
         // User message bubble aligned to the right
@@ -84,7 +87,7 @@ fun ChatMessageItem(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            // Assistant Header (Nova AI Spark icon + Badge)
+            // Assistant Header (Model Avatar + Model Name + Persona Badge)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(bottom = 6.dp)
@@ -93,13 +96,13 @@ fun ChatMessageItem(
                     modifier = Modifier
                         .size(28.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF1E293B)),
+                        .background(Color(0xFF1E2433)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = "Nova AI",
-                        tint = if (message.isError) Color(0xFFEF4444) else Color(0xFF38BDF8),
+                        imageVector = if (message.modelUsed == "thenux") Icons.Default.Bolt else Icons.Default.AutoAwesome,
+                        contentDescription = modelInfo.displayName,
+                        tint = if (message.isError) Color(0xFFEF4444) else modelInfo.badgeColor,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -107,7 +110,7 @@ fun ChatMessageItem(
                 Spacer(modifier = Modifier.width(8.dp))
 
                 Text(
-                    text = "Nova AI",
+                    text = modelInfo.displayName,
                     color = Color.White,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
@@ -115,16 +118,34 @@ fun ChatMessageItem(
 
                 Spacer(modifier = Modifier.width(6.dp))
 
+                // Model Tag (e.g. "T-Nex 1.0" or "Nova Pro")
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xFF38BDF8).copy(alpha = 0.15f))
+                        .background(modelInfo.badgeColor.copy(alpha = 0.15f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = modelInfo.versionTag,
+                        color = modelInfo.badgeColor,
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                // Persona badge
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFF333333))
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
                         text = currentPersona.badge,
-                        color = Color(0xFF38BDF8),
-                        fontSize = 9.5.sp,
+                        color = Color(0xFFCCCCCC),
+                        fontSize = 9.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -172,11 +193,10 @@ fun ChatMessageItem(
                 horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Copy entire message
                 IconButton(
                     onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("Nova AI response", message.content)
+                        val clip = ClipData.newPlainText("AI response", message.content)
                         clipboard.setPrimaryClip(clip)
                         Toast.makeText(context, "Copied response to clipboard", Toast.LENGTH_SHORT).show()
                     },
@@ -190,7 +210,6 @@ fun ChatMessageItem(
                     )
                 }
 
-                // TTS Read Aloud
                 IconButton(
                     onClick = { onSpeakText(message.content) },
                     modifier = Modifier.size(32.dp)
@@ -203,7 +222,6 @@ fun ChatMessageItem(
                     )
                 }
 
-                // Share
                 IconButton(
                     onClick = {
                         val shareIntent = Intent().apply {
@@ -231,7 +249,7 @@ fun ChatMessageItem(
                         Icon(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = "Retry",
-                            tint = Color(0xFF38BDF8),
+                            tint = modelInfo.badgeColor,
                             modifier = Modifier.size(16.dp)
                         )
                     }

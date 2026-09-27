@@ -2,6 +2,7 @@ package com.example
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.example.data.model.AiModels
 import com.example.data.persona.Personas
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -27,5 +28,15 @@ class ExampleRobolectricTest {
     assertNotNull(coder)
     assertEquals("coder", coder.id)
     assertEquals("Senior Code Architect", coder.name)
+  }
+
+  @Test
+  fun `verify available ai models include Nova and Thenux`() {
+    val models = AiModels.all
+    assertEquals(2, models.size)
+    assertNotNull(AiModels.getById("nova"))
+    assertNotNull(AiModels.getById("thenux"))
+    assertEquals("Thenux AI", AiModels.getById("thenux").displayName)
+    assertEquals("T-Nex 1.0", AiModels.getById("thenux").versionTag)
   }
 }

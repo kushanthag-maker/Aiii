@@ -10,7 +10,9 @@ import com.example.data.persona.Personas
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.logging.HttpLoggingInterceptor
 import org.json.JSONObject
 import retrofit2.Retrofit
@@ -23,12 +25,15 @@ class NovaRepository(
     private val chatDao: ChatDao = AppDatabase.getDatabase(context).chatDao()
 ) {
     companion object {
-        const val DEFAULT_API_KEY = "supun-emdf5nu7h8b3svh1cah0axti"
-        private const val BASE_URL = "https://supunofc.site/"
+        const val DEFAULT_NOVA_KEY = "supun-emdf5nu7h8b3svh1cah0axti"
+        const val DEFAULT_THENUX_KEY = "tnx_live_9a3b3d3337e50801e9664c4a0e73af2495fc834c052b49ed"
+        private const val NOVA_BASE_URL = "https://supunofc.site/"
+        private const val THENUX_BASE_URL = "https://edge.thenuxofc.store/"
         private const val TAG = "NovaRepository"
     }
 
-    private val apiService: NovaApiService
+    private val novaApiService: NovaApiService
+    private val thenuxApiService: ThenuxApiService
 
     init {
         val logging = HttpLoggingInterceptor().apply {
@@ -42,16 +47,21 @@ class NovaRepository(
             .addInterceptor(logging)
             .build()
 
-        val retrofit = Retrofit.Builder()
-            .baseUrl(BASE_URL)
+        val novaRetrofit = Retrofit.Builder()
+            .baseUrl(NOVA_BASE_URL)
             .client(client)
             .addConverterFactory(MoshiConverterFactory.create())
             .build()
+        novaApiService = novaRetrofit.create(NovaApiService::class.java)
 
-        apiService = retrofit.create(NovaApiService::class.java)
+        val thenuxRetrofit = Retrofit.Builder()
+            .baseUrl(THENUX_BASE_URL)
+            .client(client)
+            .addConverterFactory(MoshiConverterFactory.create())
+            .build()
+        thenuxApiService = thenuxRetrofit.create(ThenuxApiService::class.java)
     }
 
-    // Conversations Flow
     val allConversations: Flow<List<Conversation>> = chatDao.getAllConversations()
     val pinnedConversations: Flow<List<Conversation>> = chatDao.getPinnedConversations()
     val recentConversations: Flow<List<Conversation>> = chatDao.getRecentConversations()
@@ -64,11 +74,16 @@ class NovaRepository(
         return chatDao.searchConversations(query)
     }
 
-    suspend fun createConversation(personaId: String = "coder", title: String = "New Chat"): Conversation {
+    suspend fun createConversation(
+        personaId: String = "coder",
+        selectedModelId: String = "nova",
+        title: String = "New Chat"
+    ): Conversation {
         val conv = Conversation(
             id = UUID.randomUUID().toString(),
             title = title,
             personaId = personaId,
+            selectedModelId = selectedModelId,
             createdAt = System.currentTimeMillis(),
             updatedAt = System.currentTimeMillis()
         )
@@ -93,12 +108,14 @@ class NovaRepository(
     }
 
     /**
-     * Send user message and get response from Nova AI
+     * Send user message to selected AI model (Nova AI or Thenux AI)
      */
     suspend fun sendMessage(
         conversationId: String,
         userText: String,
-        apiKey: String = DEFAULT_API_KEY,
+        modelId: String = "nova",
+        novaApiKey: String = DEFAULT_NOVA_KEY,
+        thenuxApiKey: String = DEFAULT_THENUX_KEY,
         customSystemPrompt: String? = null,
         personaId: String = "coder",
         conversationHistory: List<ChatMessage> = emptyList()
@@ -111,7 +128,8 @@ class NovaRepository(
                 role = "user",
                 content = userText,
                 timestamp = System.currentTimeMillis(),
-                hasCode = userText.contains("```") || userText.contains("fun ") || userText.contains("class ")
+                hasCode = userText.contains("```") || userText.contains("fun ") || userText.contains("class "),
+                modelUsed = modelId
             )
             chatDao.insertMessage(userMsg)
 
@@ -128,7 +146,6 @@ class NovaRepository(
             val persona = Personas.getById(personaId)
             val effectivePrompt = customSystemPrompt?.takeIf { it.isNotBlank() } ?: persona.systemPrompt
 
-            // Build query context with instructions and recent conversational continuity
             val recentContext = conversationHistory.takeLast(4)
                 .joinToString("\n") { "${if (it.role == "user") "User" else "Assistant"}: ${it.content.take(150)}" }
 
@@ -140,25 +157,16 @@ class NovaRepository(
                 append("\nUser query: ").append(userText)
             }
 
-            // 3. Call Nova AI API
-            val keyToUse = if (apiKey.isNotBlank()) apiKey else DEFAULT_API_KEY
-            val response = apiService.queryNova(query = fullQuery, apiKey = keyToUse)
-
-            if (!response.isSuccessful) {
-                val errorBody = response.errorBody()?.string() ?: "HTTP error: ${response.code()}"
-                val errorMsg = "Error: Server returned code ${response.code()}"
-                saveErrorMessage(conversationId, errorMsg)
-                return@withContext Result.failure(Exception(errorMsg))
+            // 3. Dispatch to selected AI model
+            val replyText = if (modelId == "thenux") {
+                callThenuxApi(fullQuery, thenuxApiKey)
+            } else {
+                callNovaApi(fullQuery, novaApiKey)
             }
 
-            val bodyString = response.body()?.string() ?: ""
-            Log.d(TAG, "Raw API response: $bodyString")
-
-            val replyText = parseNovaResponse(bodyString)
-
             if (replyText.isBlank()) {
-                val errMsg = "Error: Empty response received from Nova AI."
-                saveErrorMessage(conversationId, errMsg)
+                val errMsg = "Error: Empty response received from AI model."
+                saveErrorMessage(conversationId, errMsg, modelId)
                 return@withContext Result.failure(Exception(errMsg))
             }
 
@@ -171,27 +179,61 @@ class NovaRepository(
                 content = replyText,
                 timestamp = System.currentTimeMillis(),
                 hasCode = hasCodeBlock,
-                isError = false
+                isError = false,
+                modelUsed = modelId
             )
             chatDao.insertMessage(assistantMsg)
 
             Result.success(replyText)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to call Nova AI", e)
-            val errorMsg = "Failed to connect to Nova AI: ${e.localizedMessage ?: "Unknown error"}. Please check your connection."
-            saveErrorMessage(conversationId, errorMsg)
+            Log.e(TAG, "Failed to call AI model $modelId", e)
+            val errorMsg = "Failed to connect to AI: ${e.localizedMessage ?: "Unknown error"}. Please check your connection."
+            saveErrorMessage(conversationId, errorMsg, modelId)
             Result.failure(e)
         }
     }
 
-    private suspend fun saveErrorMessage(conversationId: String, errorText: String) {
+    private suspend fun callNovaApi(fullQuery: String, apiKey: String): String {
+        val keyToUse = if (apiKey.isNotBlank()) apiKey else DEFAULT_NOVA_KEY
+        val response = novaApiService.queryNova(query = fullQuery, apiKey = keyToUse)
+
+        if (!response.isSuccessful) {
+            throw Exception("Nova Server returned code ${response.code()}")
+        }
+
+        val bodyString = response.body()?.string() ?: ""
+        return parseNovaResponse(bodyString)
+    }
+
+    private suspend fun callThenuxApi(fullQuery: String, apiKey: String): String {
+        val keyToUse = if (apiKey.isNotBlank()) apiKey else DEFAULT_THENUX_KEY
+        val bearer = if (keyToUse.startsWith("Bearer ")) keyToUse else "Bearer $keyToUse"
+
+        val jsonBody = JSONObject().apply {
+            put("message", fullQuery)
+            put("model", "t-nex-1.0")
+        }
+
+        val requestBody = jsonBody.toString().toRequestBody("application/json".toMediaType())
+        val response = thenuxApiService.chat(authorization = bearer, body = requestBody)
+
+        if (!response.isSuccessful) {
+            throw Exception("Thenux Server returned code ${response.code()}")
+        }
+
+        val bodyString = response.body()?.string() ?: ""
+        return parseThenuxResponse(bodyString)
+    }
+
+    private suspend fun saveErrorMessage(conversationId: String, errorText: String, modelId: String) {
         val errorMsg = ChatMessage(
             id = UUID.randomUUID().toString(),
             conversationId = conversationId,
             role = "assistant",
             content = errorText,
             timestamp = System.currentTimeMillis(),
-            isError = true
+            isError = true,
+            modelUsed = modelId
         )
         chatDao.insertMessage(errorMsg)
     }
@@ -214,7 +256,23 @@ class NovaRepository(
                 rawJson
             }
         } catch (e: Exception) {
-            // Not JSON, return as plain text
+            rawJson
+        }
+    }
+
+    private fun parseThenuxResponse(rawJson: String): String {
+        return try {
+            val json = JSONObject(rawJson)
+            if (json.has("response")) {
+                json.getString("response")
+            } else if (json.has("message")) {
+                json.getString("message")
+            } else if (json.has("error")) {
+                "Error from Thenux AI: " + json.getString("error")
+            } else {
+                rawJson
+            }
+        } catch (e: Exception) {
             rawJson
         }
     }

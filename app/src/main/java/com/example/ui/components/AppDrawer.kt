@@ -28,15 +28,11 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.PushPin
-import androidx.compose.material3.DividerDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -57,17 +53,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.AiModelInfo
 import com.example.data.model.Conversation
 
 @Composable
 fun AppDrawer(
     pinnedConversations: List<Conversation>,
     recentConversations: List<Conversation>,
+    currentModel: AiModelInfo,
     selectedConversationId: String?,
     onSelectConversation: (String) -> Unit,
     onNewChatClick: () -> Unit,
     onTogglePin: (String, Boolean) -> Unit,
     onDeleteConversation: (String) -> Unit,
+    onOpenModelSelector: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenPersonas: () -> Unit,
     onOpenCodeLibrary: () -> Unit,
@@ -84,7 +83,7 @@ fun AppDrawer(
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
-        // Drawer Top Bar (matching Screenshot 2: "ChatGPT" / "Nova AI" + Search icon)
+        // Drawer Top Bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -158,7 +157,7 @@ fun AppDrawer(
             }
         }
 
-        // Drawer Items List (matching Screenshot 2: Images, Library, Projects, Scheduled, Plugins)
+        // Drawer Items List
         LazyColumn(
             modifier = Modifier
                 .weight(1f)
@@ -166,6 +165,53 @@ fun AppDrawer(
                 .padding(horizontal = 12.dp)
         ) {
             item {
+                // AI Model Selection Item
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF181B24))
+                        .clickable { onOpenModelSelector() }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Layers,
+                        contentDescription = "Model",
+                        tint = currentModel.badgeColor,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Model",
+                            color = Color(0xFF9CA3AF),
+                            fontSize = 11.5.sp
+                        )
+                        Text(
+                            text = currentModel.displayName,
+                            color = Color.White,
+                            fontSize = 14.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(currentModel.badgeColor.copy(alpha = 0.2f))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = currentModel.versionTag,
+                            color = currentModel.badgeColor,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
                 DrawerNavigationRow(
                     icon = Icons.Default.Code,
                     label = "Code Studio & Prompts",
@@ -185,7 +231,7 @@ fun AppDrawer(
                 Spacer(modifier = Modifier.height(14.dp))
             }
 
-            // Pinned Section (matching Screenshot 2: "Pinned")
+            // Pinned Section
             val filteredPinned = pinnedConversations.filter {
                 searchQuery.isBlank() || it.title.contains(searchQuery, ignoreCase = true)
             }
@@ -215,7 +261,7 @@ fun AppDrawer(
                 }
             }
 
-            // Recents Section (matching Screenshot 2: "Recents")
+            // Recents Section
             val filteredRecent = recentConversations.filter {
                 searchQuery.isBlank() || it.title.contains(searchQuery, ignoreCase = true)
             }
@@ -265,7 +311,6 @@ fun AppDrawer(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Blue "+ Chat" Pill
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(24.dp))
@@ -292,7 +337,6 @@ fun AppDrawer(
                 }
             }
 
-            // Settings Gear Button (matching Screenshot 2: round dark gear icon)
             Box(
                 modifier = Modifier
                     .size(46.dp)
@@ -351,8 +395,6 @@ private fun ConversationItemRow(
     onTogglePin: () -> Unit,
     onDelete: () -> Unit
 ) {
-    var showActions by remember { mutableStateOf(false) }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -380,7 +422,6 @@ private fun ConversationItemRow(
             modifier = Modifier.weight(1f)
         )
 
-        // Actions: Pin / Delete
         IconButton(
             onClick = onTogglePin,
             modifier = Modifier.size(28.dp)

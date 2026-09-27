@@ -15,12 +15,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.MenuOpen
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -31,14 +30,16 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.AiModelInfo
 import com.example.data.persona.AgentPersona
 
 @Composable
 fun TopBar(
+    currentModel: AiModelInfo,
     currentPersona: AgentPersona,
     onMenuClick: () -> Unit,
+    onModelClick: () -> Unit,
     onNewChatClick: () -> Unit,
-    onPersonaBadgeClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -67,30 +68,37 @@ fun TopBar(
             )
         }
 
-        // Center "Nova Plus" / Persona pill (matching "✦ Get Plus" in Screenshot 1)
+        // Center Model Selector Pill (e.g. "✦ Nova AI" or "⚡ Thenux AI")
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(20.dp))
-                .background(Color(0xFF1E293B))
-                .border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.4f), RoundedCornerShape(20.dp))
-                .clickable { onPersonaBadgeClick() }
+                .background(Color(0xFF1A1F2C))
+                .border(1.dp, currentModel.badgeColor.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                .clickable { onModelClick() }
                 .padding(horizontal = 14.dp, vertical = 7.dp)
-                .testTag("persona_badge"),
+                .testTag("model_selector_badge"),
             contentAlignment = Alignment.Center
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    imageVector = Icons.Default.AutoAwesome,
+                    imageVector = currentModel.icon,
                     contentDescription = null,
-                    tint = Color(0xFF38BDF8),
-                    modifier = Modifier.size(15.dp)
+                    tint = currentModel.badgeColor,
+                    modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = currentPersona.name,
+                    text = "${currentModel.displayName} (${currentModel.versionTag})",
                     color = Color.White,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = "Select Model",
+                    tint = Color(0xFF9CA3AF),
+                    modifier = Modifier.size(16.dp)
                 )
             }
         }
