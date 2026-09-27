@@ -8,8 +8,10 @@ import com.example.data.model.ChatMessage
 import com.example.data.model.Conversation
 import com.example.data.persona.Personas
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
+import okhttp3.ConnectionPool
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -17,6 +19,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import org.json.JSONObject
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
+import java.net.SocketTimeoutException
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -40,10 +43,20 @@ class NovaRepository(
             level = HttpLoggingInterceptor.Level.BASIC
         }
 
+        // Generous timeouts (120s) and connection pool for mobile networks and AI models
         val client = OkHttpClient.Builder()
             .connectTimeout(45, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
             .writeTimeout(45, TimeUnit.SECONDS)
+            .callTimeout(120, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
+            .addInterceptor { chain ->
+                val request = chain.request().newBuilder()
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) NovaAI/1.2")
+                    .build()
+                chain.proceed(request)
+            }
             .addInterceptor(logging)
             .build()
 
@@ -142,35 +155,54 @@ class NovaRepository(
                 chatDao.updateTitleAndTimestamp(conversationId, conversation?.title ?: "Chat", System.currentTimeMillis())
             }
 
-            // 2. Build full prompt with agent persona instruction
-            val persona = Personas.getById(personaId)
-            val effectivePrompt = customSystemPrompt?.takeIf { it.isNotBlank() } ?: persona.systemPrompt
-
-            val recentContext = conversationHistory.takeLast(4)
-                .joinToString("\n") { "${if (it.role == "user") "User" else "Assistant"}: ${it.content.take(150)}" }
-
-            val fullQuery = buildString {
-                append("Instructions: ").append(effectivePrompt)
-                if (recentContext.isNotBlank()) {
-                    append("\nRecent chat context:\n").append(recentContext)
-                }
-                append("\nUser query: ").append(userText)
-            }
-
-            // 3. Dispatch to selected AI model
+            // 2. Build prompt specifically tailored for each model architecture
             val replyText = if (modelId == "thenux") {
-                callThenuxApi(fullQuery, thenuxApiKey)
+                // Thenux AI is an edge neural endpoint that works best with concise, direct prompts.
+                // Massive instruction blocks cause it to generate excessively long tokens leading to timeouts.
+                val promptPrefix = when {
+                    !customSystemPrompt.isNullOrBlank() -> "[Instruction: ${customSystemPrompt.take(120)}] "
+                    personaId == "coder" -> "[Act as Senior Software Architect] "
+                    personaId == "debugger" -> "[Act as Code Debugger & Optimizer] "
+                    personaId == "sinhala" -> "[Answer in Sinhala] "
+                    personaId == "ui_ux" -> "[Act as Jetpack Compose UI Expert] "
+                    else -> ""
+                }
+                val formattedThenuxQuery = promptPrefix + userText
+
+                try {
+                    callThenuxApi(formattedThenuxQuery, thenuxApiKey)
+                } catch (e: SocketTimeoutException) {
+                    Log.w(TAG, "Thenux timeout on initial request, retrying with raw query...", e)
+                    delay(1000)
+                    // Retry once with minimal direct query
+                    callThenuxApi(userText, thenuxApiKey)
+                }
             } else {
+                // Nova AI handles multi-line system prompts and recent context
+                val persona = Personas.getById(personaId)
+                val effectivePrompt = customSystemPrompt?.takeIf { it.isNotBlank() } ?: persona.systemPrompt
+
+                val recentContext = conversationHistory.takeLast(4)
+                    .joinToString("\n") { "${if (it.role == "user") "User" else "Assistant"}: ${it.content.take(150)}" }
+
+                val fullQuery = buildString {
+                    append("Instructions: ").append(effectivePrompt)
+                    if (recentContext.isNotBlank()) {
+                        append("\nRecent chat context:\n").append(recentContext)
+                    }
+                    append("\nUser query: ").append(userText)
+                }
+
                 callNovaApi(fullQuery, novaApiKey)
             }
 
             if (replyText.isBlank()) {
-                val errMsg = "Error: Empty response received from AI model."
+                val errMsg = "Empty response received from $modelId. Please try again."
                 saveErrorMessage(conversationId, errMsg, modelId)
                 return@withContext Result.failure(Exception(errMsg))
             }
 
-            // 4. Insert Assistant reply into DB
+            // 3. Insert Assistant reply into DB
             val hasCodeBlock = replyText.contains("```")
             val assistantMsg = ChatMessage(
                 id = UUID.randomUUID().toString(),
@@ -187,7 +219,16 @@ class NovaRepository(
             Result.success(replyText)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to call AI model $modelId", e)
-            val errorMsg = "Failed to connect to AI: ${e.localizedMessage ?: "Unknown error"}. Please check your connection."
+            val isTimeout = e is SocketTimeoutException || e.message?.contains("timeout", ignoreCase = true) == true
+            val errorMsg = if (isTimeout) {
+                if (modelId == "thenux") {
+                    "Thenux AI edge server took too long to respond. The server might be busy. Please tap Retry or switch to Nova AI (Nova Pro) at the top for faster replies."
+                } else {
+                    "Request timed out while connecting to Nova AI. Please check your internet connection and tap Retry."
+                }
+            } else {
+                "Failed to connect to AI: ${e.localizedMessage ?: "Unknown error"}. Please check your connection."
+            }
             saveErrorMessage(conversationId, errorMsg, modelId)
             Result.failure(e)
         }
@@ -205,12 +246,12 @@ class NovaRepository(
         return parseNovaResponse(bodyString)
     }
 
-    private suspend fun callThenuxApi(fullQuery: String, apiKey: String): String {
+    private suspend fun callThenuxApi(queryText: String, apiKey: String): String {
         val keyToUse = if (apiKey.isNotBlank()) apiKey else DEFAULT_THENUX_KEY
         val bearer = if (keyToUse.startsWith("Bearer ")) keyToUse else "Bearer $keyToUse"
 
         val jsonBody = JSONObject().apply {
-            put("message", fullQuery)
+            put("message", queryText)
             put("model", "t-nex-1.0")
         }
 
@@ -218,7 +259,8 @@ class NovaRepository(
         val response = thenuxApiService.chat(authorization = bearer, body = requestBody)
 
         if (!response.isSuccessful) {
-            throw Exception("Thenux Server returned code ${response.code()}")
+            val errBody = response.errorBody()?.string() ?: ""
+            throw Exception("Thenux Server returned code ${response.code()}: $errBody")
         }
 
         val bodyString = response.body()?.string() ?: ""
