@@ -58,6 +58,7 @@ fun ChatScreen(
     val currentModel by viewModel.currentModel.collectAsStateWithLifecycle()
     val novaApiKey by viewModel.novaApiKey.collectAsStateWithLifecycle()
     val thenuxApiKey by viewModel.thenuxApiKey.collectAsStateWithLifecycle()
+    val kizerApiKey by viewModel.kizerApiKey.collectAsStateWithLifecycle()
     val customSystemPrompt by viewModel.customSystemPrompt.collectAsStateWithLifecycle()
 
     val isVoiceModalOpen by viewModel.isVoiceModalOpen.collectAsStateWithLifecycle()
@@ -257,9 +258,10 @@ fun ChatScreen(
         SettingsDialog(
             currentNovaApiKey = novaApiKey,
             currentThenuxApiKey = thenuxApiKey,
+            currentKizerApiKey = kizerApiKey,
             customSystemPrompt = customSystemPrompt,
-            onSave = { novaKey, thenuxKey, prompt ->
-                viewModel.saveSettings(novaKey, thenuxKey, prompt)
+            onSave = { novaKey, thenuxKey, kizerKey, prompt ->
+                viewModel.saveSettings(novaKey, thenuxKey, kizerKey, prompt)
             },
             onDismiss = { showSettingsDialog = false }
         )

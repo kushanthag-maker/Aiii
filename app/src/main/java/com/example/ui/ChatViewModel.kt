@@ -57,9 +57,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application), T
     private val _currentPersona = MutableStateFlow(Personas.Coder)
     val currentPersona: StateFlow<AgentPersona> = _currentPersona.asStateFlow()
 
-    // Active AI Model (Nova AI or Thenux AI)
+    // Active AI Model (Kizer AI, Nova AI, or Thenux AI) - default Kizer AI for superior coding!
     private val _currentModel = MutableStateFlow(
-        AiModels.getById(prefs.getString("selected_model_id", "nova") ?: "nova")
+        AiModels.getById(prefs.getString("selected_model_id", "kizer") ?: "kizer")
     )
     val currentModel: StateFlow<AiModelInfo> = _currentModel.asStateFlow()
 
@@ -72,6 +72,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application), T
         prefs.getString("thenux_api_key", NovaRepository.DEFAULT_THENUX_KEY) ?: NovaRepository.DEFAULT_THENUX_KEY
     )
     val thenuxApiKey: StateFlow<String> = _thenuxApiKey.asStateFlow()
+
+    private val _kizerApiKey = MutableStateFlow(
+        prefs.getString("kizer_api_key", NovaRepository.DEFAULT_KIZER_KEY) ?: NovaRepository.DEFAULT_KIZER_KEY
+    )
+    val kizerApiKey: StateFlow<String> = _kizerApiKey.asStateFlow()
 
     private val _customSystemPrompt = MutableStateFlow(prefs.getString("system_prompt", "") ?: "")
     val customSystemPrompt: StateFlow<String> = _customSystemPrompt.asStateFlow()
@@ -189,6 +194,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application), T
                     modelId = _currentModel.value.id,
                     novaApiKey = _novaApiKey.value,
                     thenuxApiKey = _thenuxApiKey.value,
+                    kizerApiKey = _kizerApiKey.value,
                     customSystemPrompt = _customSystemPrompt.value,
                     personaId = _currentPersona.value.id,
                     conversationHistory = history
@@ -201,13 +207,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application), T
         }
     }
 
-    fun saveSettings(newNovaApiKey: String, newThenuxApiKey: String, newSystemPrompt: String) {
+    fun saveSettings(
+        newNovaApiKey: String,
+        newThenuxApiKey: String,
+        newKizerApiKey: String,
+        newSystemPrompt: String
+    ) {
         _novaApiKey.value = newNovaApiKey
         _thenuxApiKey.value = newThenuxApiKey
+        _kizerApiKey.value = newKizerApiKey
         _customSystemPrompt.value = newSystemPrompt
         prefs.edit()
             .putString("nova_api_key", newNovaApiKey)
             .putString("thenux_api_key", newThenuxApiKey)
+            .putString("kizer_api_key", newKizerApiKey)
             .putString("system_prompt", newSystemPrompt)
             .apply()
         Toast.makeText(getApplication(), "Settings saved successfully", Toast.LENGTH_SHORT).show()

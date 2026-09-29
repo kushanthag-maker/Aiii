@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Button
@@ -44,18 +45,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.example.data.api.NovaRepository
 
 @Composable
 fun SettingsDialog(
     currentNovaApiKey: String,
     currentThenuxApiKey: String,
+    currentKizerApiKey: String,
     customSystemPrompt: String,
-    onSave: (novaApiKey: String, thenuxApiKey: String, systemPrompt: String) -> Unit,
+    onSave: (novaApiKey: String, thenuxApiKey: String, kizerApiKey: String, systemPrompt: String) -> Unit,
     onDismiss: () -> Unit
 ) {
     var novaKeyText by remember { mutableStateOf(currentNovaApiKey) }
     var thenuxKeyText by remember { mutableStateOf(currentThenuxApiKey) }
+    var kizerKeyText by remember { mutableStateOf(currentKizerApiKey) }
     var promptText by remember { mutableStateOf(customSystemPrompt) }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -79,7 +81,7 @@ fun SettingsDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Nova & Thenux Settings",
+                        text = "AI Models & Keys Settings",
                         color = Color.White,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
@@ -98,6 +100,45 @@ fun SettingsDialog(
                 }
 
                 Spacer(modifier = Modifier.height(18.dp))
+
+                // Kizer AI (Gemini) API Key Section
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Code,
+                        contentDescription = null,
+                        tint = Color(0xFF8B5CF6),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Kizer AI Key (Gemini Flash)",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF1E1E24))
+                        .border(1.dp, Color(0xFF3B2D54), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    BasicTextField(
+                        value = kizerKeyText,
+                        onValueChange = { kizerKeyText = it },
+                        textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
+                        cursorBrush = SolidColor(Color(0xFF8B5CF6)),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Nova AI API Key Section
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -205,7 +246,7 @@ fun SettingsDialog(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(110.dp)
+                        .height(100.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color(0xFF1E1E24))
                         .border(1.dp, Color(0xFF2E2E38), RoundedCornerShape(12.dp))
@@ -242,13 +283,18 @@ fun SettingsDialog(
 
                     Button(
                         onClick = {
-                            onSave(novaKeyText.trim(), thenuxKeyText.trim(), promptText.trim())
+                            onSave(
+                                novaKeyText.trim(),
+                                thenuxKeyText.trim(),
+                                kizerKeyText.trim(),
+                                promptText.trim()
+                            )
                             onDismiss()
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF38BDF8)),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6)),
                         shape = RoundedCornerShape(16.dp)
                     ) {
-                        Text("Save", color = Color.Black, fontWeight = FontWeight.Bold)
+                        Text("Save Settings", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
             }

@@ -2,17 +2,34 @@
 .gradle
 .kotlin
 /local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
+/.idea/
 .DS_Store
-/build
+
+# Build directories
+build/
+*/build/
+**/build/
+app/build/
+.build-outputs/
+App2/
+
+# Binary & Package files
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+*.so
+
+# Captures & Native build
 /captures
 .externalNativeBuild
 .cxx
+
+# Secrets & Keystores
 local.properties
 .env
 debug.keystore
+debug.keystore.base64
+*.keystore
+*.jks
